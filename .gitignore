@@ -1,0 +1,4 @@
+/.idea/
+/target/
+/.mailmap
+/hs_err_pid*.log
