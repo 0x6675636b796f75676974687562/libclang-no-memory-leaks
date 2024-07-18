@@ -9,7 +9,7 @@ import static com.example.ClangUtils.parse;
 import static java.util.Arrays.asList;
 import static java.util.Objects.requireNonNull;
 
-final class Main {
+public final class Main {
 	private Main() {
 		assert false;
 	}

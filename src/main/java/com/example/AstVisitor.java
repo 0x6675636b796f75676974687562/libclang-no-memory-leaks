@@ -4,6 +4,7 @@ import org.bytedeco.llvm.clang.CXClientData;
 import org.bytedeco.llvm.clang.CXCursor;
 import org.bytedeco.llvm.clang.CXCursorVisitor;
 import org.bytedeco.llvm.clang.CXString;
+import org.bytedeco.llvm.clang.CXToken;
 import org.bytedeco.llvm.clang.CXTranslationUnit;
 
 import static com.example.ClangUtils.forEachToken;
@@ -32,20 +33,25 @@ final class AstVisitor extends CXCursorVisitor {
 			 * eventually results in 100% usage of all CPU cores -- in
 			 * the native code.
 			 */
-			withPointerScope(() -> {
-				try (final CXString spelling = clang_getCursorKindSpelling(clang_getCursorKind(cursor))) {
-					out.println(spelling.getString());
-				}
+			withPointerScope(new Runnable() {
+				@Override
+				public void run() {
+					try (final CXString spelling = clang_getCursorKindSpelling(clang_getCursorKind(cursor))) {
+						out.println(spelling.getString());
+					}
 
-				try (final CXTranslationUnit translationUnit = clang_Cursor_getTranslationUnit(cursor)) {
-					forEachToken(cursor, token -> {
-						final TokenKind kind = TokenKind.valueOf(clang_getTokenKind(token));
-						try (final CXString spelling = clang_getTokenSpelling(translationUnit, token)) {
-							out.printf("\t%s(\"%s\")%n", kind, spelling.getString());
-						}
-					});
+					try (final CXTranslationUnit translationUnit = clang_Cursor_getTranslationUnit(cursor)) {
+						forEachToken(cursor, new Consumer<CXToken>() {
+							@Override
+							public void accept(final CXToken token) {
+								final TokenKind kind = TokenKind.valueOf(clang_getTokenKind(token));
+								try (final CXString spelling = clang_getTokenSpelling(translationUnit, token)) {
+									out.printf("\t%s(\"%s\")%n", kind, spelling.getString());
+								}
+							}
+						});
+					}
 				}
-
 			});
 		}
 

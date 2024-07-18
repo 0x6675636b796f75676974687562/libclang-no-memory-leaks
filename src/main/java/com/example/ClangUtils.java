@@ -13,9 +13,6 @@ import org.bytedeco.llvm.clang.CXUnsavedFile;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-import java.util.stream.IntStream;
 
 import static java.lang.System.out;
 import static org.bytedeco.llvm.global.clang.CXError_Success;
@@ -40,37 +37,46 @@ final class ClangUtils {
 			final Path absoluteFile,
 			final List<String> commandLineArgs
 	) {
-		withPointerScope(() -> {
-			withIndex(clang_createIndex(1, 0), index -> {
-				withTranslationUnit(CXTranslationUnit::new, translationUnit -> {
-					try (final BytePointer sourceFilename = new BytePointer(absoluteFile.toString())) {
-						try (final PointerPointer<Pointer> commandLineArgsPtr = new PointerPointer<>(commandLineArgs.toArray(new String[0]))) {
-							try (final CXUnsavedFile unsavedFiles = new CXUnsavedFile()) {
-								final int unsavedFilesCount = 0;
+		withPointerScope(new Runnable() {
+			@Override
+			public void run() {
+				withIndex(clang_createIndex(1, 0), new Consumer<CXIndex>() {
+					@Override
+					public void accept(final CXIndex index) {
+						withTranslationUnit(new CXTranslationUnit(), new Consumer<CXTranslationUnit>() {
+							@Override
+							public void accept(final CXTranslationUnit translationUnit) {
+								try (final BytePointer sourceFilename = new BytePointer(absoluteFile.toString())) {
+									try (final PointerPointer<Pointer> commandLineArgsPtr = new PointerPointer<>(commandLineArgs.toArray(new String[0]))) {
+										try (final CXUnsavedFile unsavedFiles = new CXUnsavedFile()) {
+											final int unsavedFilesCount = 0;
 
-								final int errorCode = clang_parseTranslationUnit2(
-										index,
-										sourceFilename,
-										commandLineArgsPtr,
-										commandLineArgs.size(),
-										unsavedFiles,
-										unsavedFilesCount,
-										CXTranslationUnit_None,
-										translationUnit
-								);
+											final int errorCode = clang_parseTranslationUnit2(
+													index,
+													sourceFilename,
+													commandLineArgsPtr,
+													commandLineArgs.size(),
+													unsavedFiles,
+													unsavedFilesCount,
+													CXTranslationUnit_None,
+													translationUnit
+											);
 
-								if (errorCode == CXError_Success) {
-									try (final CXCursor rootCursor = clang_getTranslationUnitCursor(translationUnit)) {
-										clang_visitChildren(rootCursor, new AstVisitor(), null);
+											if (errorCode == CXError_Success) {
+												try (final CXCursor rootCursor = clang_getTranslationUnitCursor(translationUnit)) {
+													clang_visitChildren(rootCursor, new AstVisitor(), null);
+												}
+											} else {
+												out.printf("Failed to parse %s; parser returned code %d%n", absoluteFile, errorCode);
+											}
+										}
 									}
-								} else {
-									out.printf("Failed to parse %s; parser returned code %d%n", absoluteFile, errorCode);
 								}
 							}
-						}
+						});
 					}
 				});
-			});
+			}
 		});
 	}
 
@@ -94,10 +100,10 @@ final class ClangUtils {
 	}
 
 	private static void withTranslationUnit(
-			final Supplier<CXTranslationUnit> lazyTranslationUnit,
+			final CXTranslationUnit translationUnit,
 			final Consumer<CXTranslationUnit> block
 	) {
-		try (final CXTranslationUnit translationUnit = lazyTranslationUnit.get()) {
+		try (final CXTranslationUnit ignored = translationUnit) {
 			try {
 				block.accept(translationUnit);
 			} finally {
@@ -117,9 +123,10 @@ final class ClangUtils {
 					clang_tokenize(translationUnit, extent, tokens, tokenCountRef);
 					final int tokenCount = tokenCountRef[0];
 					try {
-						IntStream.range(0, tokenCount)
-							 .mapToObj(tokens::position)
-							 .forEach(action);
+						for (int index = 0; index < tokenCount; index++) {
+							final CXToken token = tokens.position(index);
+							action.accept(token);
+						}
 					} finally {
 						tokens.position(0L);
 						clang_disposeTokens(translationUnit, tokens, tokenCount);
