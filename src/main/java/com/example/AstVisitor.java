@@ -3,6 +3,8 @@ package com.example;
 import org.bytedeco.llvm.clang.CXClientData;
 import org.bytedeco.llvm.clang.CXCursor;
 import org.bytedeco.llvm.clang.CXCursorVisitor;
+import org.bytedeco.llvm.clang.CXString;
+import org.bytedeco.llvm.clang.CXTranslationUnit;
 
 import static com.example.ClangUtils.forEachToken;
 import static com.example.ClangUtils.withPointerScope;
@@ -17,7 +19,7 @@ import static org.bytedeco.llvm.global.clang.clang_getTokenSpelling;
 final class AstVisitor extends CXCursorVisitor {
 	@Override
 	public int call(final CXCursor cursor, final CXCursor parent, final CXClientData clientData) {
-		try (cursor; parent; clientData) {
+		try (final CXCursor c = cursor; final CXCursor p = parent; final CXClientData d = clientData) {
 			/*-
 			 * Entering a new `PointerScope` here is 100% necessary,
 			 * probably because the outer ("lower") stack frame is a
@@ -31,14 +33,14 @@ final class AstVisitor extends CXCursorVisitor {
 			 * the native code.
 			 */
 			withPointerScope(() -> {
-				try (final var spelling = clang_getCursorKindSpelling(clang_getCursorKind(cursor))) {
+				try (final CXString spelling = clang_getCursorKindSpelling(clang_getCursorKind(cursor))) {
 					out.println(spelling.getString());
 				}
 
-				try (final var translationUnit = clang_Cursor_getTranslationUnit(cursor)) {
+				try (final CXTranslationUnit translationUnit = clang_Cursor_getTranslationUnit(cursor)) {
 					forEachToken(cursor, token -> {
-						final var kind = TokenKind.valueOf(clang_getTokenKind(token));
-						try (final var spelling = clang_getTokenSpelling(translationUnit, token)) {
+						final TokenKind kind = TokenKind.valueOf(clang_getTokenKind(token));
+						try (final CXString spelling = clang_getTokenSpelling(translationUnit, token)) {
 							out.printf("\t%s(\"%s\")%n", kind, spelling.getString());
 						}
 					});

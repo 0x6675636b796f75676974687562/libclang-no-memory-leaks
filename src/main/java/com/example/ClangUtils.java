@@ -1,10 +1,12 @@
 package com.example;
 
 import org.bytedeco.javacpp.BytePointer;
+import org.bytedeco.javacpp.Pointer;
 import org.bytedeco.javacpp.PointerPointer;
 import org.bytedeco.javacpp.PointerScope;
 import org.bytedeco.llvm.clang.CXCursor;
 import org.bytedeco.llvm.clang.CXIndex;
+import org.bytedeco.llvm.clang.CXSourceRange;
 import org.bytedeco.llvm.clang.CXToken;
 import org.bytedeco.llvm.clang.CXTranslationUnit;
 import org.bytedeco.llvm.clang.CXUnsavedFile;
@@ -41,12 +43,12 @@ final class ClangUtils {
 		withPointerScope(() -> {
 			withIndex(clang_createIndex(1, 0), index -> {
 				withTranslationUnit(CXTranslationUnit::new, translationUnit -> {
-					try (final var sourceFilename = new BytePointer(absoluteFile.toString())) {
-						try (final var commandLineArgsPtr = new PointerPointer<>(commandLineArgs.toArray(new String[0]))) {
-							try (final var unsavedFiles = new CXUnsavedFile()) {
-								final var unsavedFilesCount = 0;
+					try (final BytePointer sourceFilename = new BytePointer(absoluteFile.toString())) {
+						try (final PointerPointer<Pointer> commandLineArgsPtr = new PointerPointer<>(commandLineArgs.toArray(new String[0]))) {
+							try (final CXUnsavedFile unsavedFiles = new CXUnsavedFile()) {
+								final int unsavedFilesCount = 0;
 
-								final var errorCode = clang_parseTranslationUnit2(
+								final int errorCode = clang_parseTranslationUnit2(
 										index,
 										sourceFilename,
 										commandLineArgsPtr,
@@ -58,7 +60,7 @@ final class ClangUtils {
 								);
 
 								if (errorCode == CXError_Success) {
-									try (final var rootCursor = clang_getTranslationUnitCursor(translationUnit)) {
+									try (final CXCursor rootCursor = clang_getTranslationUnitCursor(translationUnit)) {
 										clang_visitChildren(rootCursor, new AstVisitor(), null);
 									}
 								} else {
@@ -73,7 +75,7 @@ final class ClangUtils {
 	}
 
 	static void withPointerScope(final Runnable block) {
-		try (final var ignored = new PointerScope()) {
+		try (final PointerScope ignored = new PointerScope()) {
 			block.run();
 		}
 	}
@@ -82,7 +84,7 @@ final class ClangUtils {
 			final CXIndex index,
 			final Consumer<CXIndex> block
 	) {
-		try (index) {
+		try (final CXIndex ignored = index) {
 			try {
 				block.accept(index);
 			} finally {
@@ -95,7 +97,7 @@ final class ClangUtils {
 			final Supplier<CXTranslationUnit> lazyTranslationUnit,
 			final Consumer<CXTranslationUnit> block
 	) {
-		try (final var translationUnit = lazyTranslationUnit.get()) {
+		try (final CXTranslationUnit translationUnit = lazyTranslationUnit.get()) {
 			try {
 				block.accept(translationUnit);
 			} finally {
@@ -108,12 +110,12 @@ final class ClangUtils {
 			final CXCursor cursor,
 			final Consumer<? super CXToken> action
 	) {
-		try (final var extent = clang_getCursorExtent(cursor)) {
-			try (final var translationUnit = clang_Cursor_getTranslationUnit(cursor)) {
-				try (final var tokens = new CXToken()) {
-					final var tokenCountRef = new int[1];
+		try (final CXSourceRange extent = clang_getCursorExtent(cursor)) {
+			try (final CXTranslationUnit translationUnit = clang_Cursor_getTranslationUnit(cursor)) {
+				try (final CXToken tokens = new CXToken()) {
+					final int[] tokenCountRef = new int[1];
 					clang_tokenize(translationUnit, extent, tokens, tokenCountRef);
-					final var tokenCount = tokenCountRef[0];
+					final int tokenCount = tokenCountRef[0];
 					try {
 						IntStream.range(0, tokenCount)
 							 .mapToObj(tokens::position)
